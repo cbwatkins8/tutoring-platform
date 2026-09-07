@@ -4,6 +4,7 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   turbopack: { root: process.cwd() },
   async headers() {
+    const isProduction = process.env.NODE_ENV === 'production';
     const securityHeaders = [
       { key: 'X-Content-Type-Options', value: 'nosniff' },
       { key: 'X-Frame-Options', value: 'DENY' },
@@ -13,7 +14,7 @@ const nextConfig: NextConfig = {
         key: 'Content-Security-Policy',
         value: [
           "default-src 'self'",
-          "script-src 'self' 'unsafe-inline'",
+          `script-src 'self' 'unsafe-inline'${isProduction ? '' : " 'unsafe-eval'"}`,
           "style-src 'self' 'unsafe-inline'",
           "img-src 'self' data: blob:",
           "font-src 'self'",
@@ -25,7 +26,7 @@ const nextConfig: NextConfig = {
       },
     ];
 
-    if (process.env.NODE_ENV === 'production') {
+    if (isProduction) {
       securityHeaders.push({
         key: 'Strict-Transport-Security',
         value: 'max-age=31536000; includeSubDomains',
