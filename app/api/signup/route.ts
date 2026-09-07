@@ -1,78 +1,159 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Pool } from 'pg';
 import bcrypt from 'bcryptjs';
+import {
+  createSessionToken,
+  SESSION_COOKIE_NAME,
+  sessionCookieOptions,
+} from '@/lib/session';
+import { pool } from '@/lib/db';
+import { withinRateLimit } from '@/lib/rate-limit';
 
-// Initialize PostgreSQL connection
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+interface SignupRequest {
+  parent_name: string;
+  email: string;
+  password: string;
+  student_first_name: string;
+  student_last_name: string;
+  grade_level: string;
+  subjects: string;
+}
 
 export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const { parentName, parentEmail, parentPassword, studentName, studentGrade, studentSubjects } = body;
+  // A single connection so all three writes share one transaction. Previously these
+  // were three independent statements: if the third failed, the user and student
+  // rows stayed behind as orphans and the email was permanently unusable.
+  const client = await pool.connect();
 
-    // Validate required fields
-    if (!parentName || !parentEmail || !parentPassword || !studentName || !studentGrade) {
+  try {
+    const body: SignupRequest = await request.json();
+    const {
+      parent_name,
+      email,
+      password,
+      student_first_name,
+      student_last_name,
+      grade_level,
+      subjects,
+    } = body;
+
+    if (
+      !parent_name ||
+      !email ||
+      !password ||
+      !student_first_name ||
+      !student_last_name ||
+      !grade_level
+    ) {
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { message: 'Missing required fields' },
         { status: 400 }
       );
     }
 
-    // Check if user already exists
-    const existingUser = await pool.query(
+    if (password.length < 8) {
+      return NextResponse.json(
+        { message: 'Password must be at least 8 characters' },
+        { status: 400 }
+      );
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      return NextResponse.json({ message: 'Enter a valid email address' }, { status: 400 });
+    }
+    if (!(await withinRateLimit(request, 'signup', normalizedEmail, 5, 60))) {
+      return NextResponse.json(
+        { message: 'Too many signup attempts. Please try again later.' },
+        { status: 429 }
+      );
+    }
+
+    const existingUser = await client.query(
       'SELECT id FROM users WHERE email = $1',
-      [parentEmail]
+      [normalizedEmail]
     );
 
     if (existingUser.rows.length > 0) {
       return NextResponse.json(
-        { error: 'Email already registered' },
-        { status: 400 }
+        { message: 'Email already registered' },
+        { status: 409 }
       );
     }
 
-    // Hash password
-    const saltRounds = 10;
-    const hashedPassword = await bcrypt.hash(parentPassword, saltRounds);
+    const passwordHash = await bcrypt.hash(password, 10);
 
-    // Insert parent user
-    const userResult = await pool.query(
-      'INSERT INTO users (email, name, password_hash, role, created_at) VALUES ($1, $2, $3, $4, NOW()) RETURNING id',
-      [parentEmail, parentName, hashedPassword, 'parent']
+    await client.query('BEGIN');
+
+    const userResult = await client.query(
+      `INSERT INTO users (email, name, password_hash, role, created_at)
+       VALUES ($1, $2, $3, 'parent', NOW())
+       RETURNING id, email, name, role, session_version`,
+      [normalizedEmail, parent_name, passwordHash]
     );
 
-    const userId = userResult.rows[0].id;
+    const parentUser = userResult.rows[0];
+    const parentUserId = parentUser.id;
 
-    // Insert student
-    const studentResult = await pool.query(
-      'INSERT INTO students (first_name, last_name, grade_level, academic_notes, created_at) VALUES ($1, $2, $3, $4, NOW()) RETURNING id',
-      [studentName, 'Student', parseInt(studentGrade), studentSubjects.join(', ')]
+    // grade_level is INT in the schema; coerce explicitly rather than relying on
+    // Postgres to cast the string the form sends.
+    const gradeInt = parseInt(grade_level, 10);
+    if (!Number.isInteger(gradeInt) || gradeInt < 6 || gradeInt > 12) {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ message: 'Grade must be between 6 and 12' }, { status: 400 });
+    }
+
+    const studentResult = await client.query(
+      `INSERT INTO students (first_name, last_name, grade_level, subjects, created_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       RETURNING id`,
+      [student_first_name, student_last_name, gradeInt, subjects || null]
     );
 
     const studentId = studentResult.rows[0].id;
 
-    // Link student to parent
-    await pool.query(
-      'INSERT INTO student_guardians (student_id, user_id, relationship, primary_contact) VALUES ($1, $2, $3, $4)',
-      [studentId, userId, 'parent', true]
+    // Column is user_id, not guardian_id. student_guardians has no created_at.
+    await client.query(
+      `INSERT INTO student_guardians (student_id, user_id, relationship, primary_contact)
+       VALUES ($1, $2, 'parent', TRUE)`,
+      [studentId, parentUserId]
     );
 
-    return NextResponse.json(
+    await client.query('COMMIT');
+
+    const token = createSessionToken({
+      userId: parentUserId,
+      email: parentUser.email,
+      role: parentUser.role,
+      version: parentUser.session_version,
+    });
+
+    const response = NextResponse.json(
       {
-        success: true,
-        message: 'Account created successfully',
-        userId,
+        message: 'Signup successful',
+        userId: parentUserId,
         studentId,
+        email: parentUser.email,
+        name: parentUser.name,
+        role: parentUser.role,
       },
       { status: 201 }
     );
+    response.cookies.set(SESSION_COOKIE_NAME, token, sessionCookieOptions);
+    return response;
   } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
+    if (error instanceof SyntaxError) {
+      return NextResponse.json({ message: 'Invalid JSON request' }, { status: 400 });
+    }
+    if ((error as { code?: string }).code === '23505') {
+      return NextResponse.json({ message: 'Email already registered' }, { status: 409 });
+    }
     console.error('Signup error:', error);
     return NextResponse.json(
-      { error: 'Failed to create account. Please try again.' },
+      { message: 'An error occurred during signup' },
       { status: 500 }
     );
+  } finally {
+    client.release();
   }
 }

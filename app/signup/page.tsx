@@ -1,263 +1,242 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { refreshCurrentUser, setCurrentUser } from '@/lib/auth';
+import StudentFields, {
+  emptyStudent,
+  inputClass,
+  type StudentFieldsValue,
+} from '@/components/StudentFields';
 
-export default function Signup() {
+export default function SignupPage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
-  const [loading, setLoading] = useState(false);
+
+  const [parentName, setParentName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  const [student, setStudent] = useState<StudentFieldsValue>(emptyStudent());
+
   const [error, setError] = useState('');
-  const [formData, setFormData] = useState({
-    parentName: '',
-    parentEmail: '',
-    parentPassword: '',
-    studentName: '',
-    studentGrade: '',
-    studentSubjects: [],
-  });
+  const [loading, setLoading] = useState(false);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
-    setError(''); // Clear error when user types
-  };
+  useEffect(() => {
+    refreshCurrentUser().then((user) => {
+      if (user) router.replace(user.role === 'tutor' ? '/tutor-dashboard' : '/dashboard');
+    });
+  }, [router]);
 
-  const handleSubjectChange = (subject: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      studentSubjects: prev.studentSubjects.includes(subject)
-        ? prev.studentSubjects.filter((s) => s !== subject)
-        : [...prev.studentSubjects, subject],
-    }));
-  };
-
-  const handleNext = () => {
-    if (step === 1 && formData.parentName && formData.parentEmail && formData.parentPassword) {
-      setStep(2);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleStep1Submit = (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setError('');
+
+    if (!parentName || !email || !password) {
+      setError('Please fill in all fields');
+      return;
+    }
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters');
+      return;
+    }
+
+    setStep(2);
+  };
+
+  const handleStep2Submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (!student.firstName || !student.lastName || student.subjects.length === 0) {
+      setError('Please fill in all student fields and select at least one subject');
+      return;
+    }
+
+    setLoading(true);
 
     try {
       const response = await fetch('/api/signup', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          parent_name: parentName,
+          email,
+          password,
+          student_first_name: student.firstName,
+          student_last_name: student.lastName,
+          grade_level: student.grade,
+          subjects: student.subjects.join(', '),
+        }),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.error || 'Failed to create account');
+        setError(data.message || 'Signup failed');
         setLoading(false);
         return;
       }
 
-      // Success! Redirect to dashboard
-      alert('Account created! Redirecting to your dashboard...');
+      setCurrentUser({ userId: data.userId, email: data.email, role: data.role });
       router.push('/dashboard');
-    } catch (err) {
+    } catch {
       setError('An error occurred. Please try again.');
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* NAVBAR */}
-      <nav className="bg-blue-900 shadow-lg">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
-          <h1 className="text-3xl font-bold text-white">Civil Tutoring</h1>
-          <a href="/" className="text-gray-200 hover:text-white">
-            Back to Home
-          </a>
+    <div className="min-h-screen bg-white flex flex-col">
+      <nav className="bg-slate-900 text-white">
+        <div className="max-w-4xl mx-auto px-4 py-4">
+          <Link href="/" className="text-xl font-bold">
+            Civil Tutoring
+          </Link>
         </div>
       </nav>
 
-      {/* SIGNUP CONTAINER */}
-      <div className="max-w-md mx-auto px-4 py-12">
-        <div className="bg-white rounded-lg shadow-md p-8">
-          {/* HEADER */}
-          <h2 className="text-3xl font-bold text-blue-900 mb-2">Create Account</h2>
-          <p className="text-slate-600 mb-8">
-            {step === 1 ? 'Tell us about yourself' : 'Tell us about your student'}
-          </p>
-
-          {/* PROGRESS INDICATOR */}
-          <div className="flex gap-2 mb-8">
-            <div className={`h-2 flex-1 rounded ${step >= 1 ? 'bg-teal-500' : 'bg-gray-200'}`}></div>
-            <div className={`h-2 flex-1 rounded ${step >= 2 ? 'bg-teal-500' : 'bg-gray-200'}`}></div>
+      <div className="flex-1 flex items-center justify-center px-4 py-8 sm:py-12">
+        <div className="w-full max-w-md">
+          {/* Progress Indicator */}
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <div
+                className={`flex items-center justify-center w-10 h-10 rounded-full ${
+                  step === 1 ? 'bg-teal-500 text-white' : 'bg-green-500 text-white'
+                }`}
+              >
+                {step === 1 ? '1' : '✓'}
+              </div>
+              <div
+                className={`flex-1 h-1 mx-2 ${step === 2 ? 'bg-teal-500' : 'bg-gray-300'}`}
+              ></div>
+              <div
+                className={`flex items-center justify-center w-10 h-10 rounded-full ${
+                  step === 2 ? 'bg-teal-500 text-white' : 'bg-gray-300 text-white'
+                }`}
+              >
+                2
+              </div>
+            </div>
+            <div className="flex justify-between text-sm text-gray-600">
+              <span>Parent Info</span>
+              <span>Student Info</span>
+            </div>
           </div>
 
-          {/* ERROR MESSAGE */}
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-              {error}
-            </div>
-          )}
+          {step === 1 && (
+            <>
+              <h1 className="text-3xl font-bold text-slate-900 mb-2">Create Account</h1>
+              <p className="text-gray-600 mb-8">Enter your parent information</p>
 
-          {/* FORM */}
-          <form onSubmit={handleSubmit}>
-            {/* STEP 1: Parent Information */}
-            {step === 1 && (
-              <div className="space-y-4">
+              <form onSubmit={handleStep1Submit} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-semibold text-blue-900 mb-2">
-                    Your Name
+                  <label htmlFor="name" className="block text-sm font-medium text-slate-900 mb-2">
+                    Full Name
                   </label>
                   <input
+                    id="name"
                     type="text"
-                    name="parentName"
-                    value={formData.parentName}
-                    onChange={handleInputChange}
+                    value={parentName}
+                    onChange={(e) => setParentName(e.target.value)}
                     placeholder="John Smith"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-200"
+                    className={inputClass}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-blue-900 mb-2">
-                    Email
+                  <label htmlFor="email" className="block text-sm font-medium text-slate-900 mb-2">
+                    Email Address
                   </label>
                   <input
+                    id="email"
                     type="email"
-                    name="parentEmail"
-                    value={formData.parentEmail}
-                    onChange={handleInputChange}
-                    placeholder="john@example.com"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-200"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    className={inputClass}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-blue-900 mb-2">
+                  <label htmlFor="password" className="block text-sm font-medium text-slate-900 mb-2">
                     Password
                   </label>
                   <input
+                    id="password"
                     type="password"
-                    name="parentPassword"
-                    value={formData.parentPassword}
-                    onChange={handleInputChange}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-200"
+                    className={inputClass}
                   />
-                  <p className="text-xs text-slate-500 mt-1">At least 8 characters</p>
                 </div>
+
+                {error && (
+                  <div role="alert" className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                    {error}
+                  </div>
+                )}
 
                 <button
-                  type="button"
-                  onClick={handleNext}
-                  className="w-full bg-orange-500 text-white py-3 rounded-lg font-semibold hover:bg-orange-600 transition-colors mt-6"
+                  type="submit"
+                  className="w-full bg-orange-700 hover:bg-orange-800 text-white font-semibold py-3 px-4 rounded-lg transition-colors"
                 >
-                  Next →
+                  Next Step
                 </button>
-              </div>
-            )}
+              </form>
+            </>
+          )}
 
-            {/* STEP 2: Student Information */}
-            {step === 2 && (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-semibold text-blue-900 mb-2">
-                    Student Name
-                  </label>
-                  <input
-                    type="text"
-                    name="studentName"
-                    value={formData.studentName}
-                    onChange={handleInputChange}
-                    placeholder="Emma Smith"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-200"
-                  />
-                </div>
+          {step === 2 && (
+            <>
+              <h1 className="text-3xl font-bold text-slate-900 mb-2">Student Information</h1>
+              <p className="text-gray-600 mb-8">Tell us about your student</p>
 
-                <div>
-                  <label className="block text-sm font-semibold text-blue-900 mb-2">
-                    Grade Level
-                  </label>
-                  <select
-                    name="studentGrade"
-                    value={formData.studentGrade}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-200"
-                  >
-                    <option value="">Select Grade</option>
-                    <option value="6">6th Grade</option>
-                    <option value="7">7th Grade</option>
-                    <option value="8">8th Grade</option>
-                    <option value="9">9th Grade</option>
-                    <option value="10">10th Grade</option>
-                    <option value="11">11th Grade</option>
-                    <option value="12">12th Grade</option>
-                  </select>
-                </div>
+              <form onSubmit={handleStep2Submit} className="space-y-4">
+                <StudentFields value={student} onChange={setStudent} idPrefix="signup" />
 
-                <div>
-                  <label className="block text-sm font-semibold text-blue-900 mb-3">
-                    Subjects (Select All That Apply)
-                  </label>
-                  <div className="space-y-2">
-                    {['Math', 'Reading/ELA', 'Science', 'Test Prep (SAT/ACT)'].map((subject) => (
-                      <label key={subject} className="flex items-center">
-                        <input
-                          type="checkbox"
-                          checked={formData.studentSubjects.includes(subject)}
-                          onChange={() => handleSubjectChange(subject)}
-                          className="w-4 h-4 text-teal-500 rounded focus:ring-teal-200"
-                        />
-                        <span className="ml-3 text-slate-700">{subject}</span>
-                      </label>
-                    ))}
+                {error && (
+                  <div role="alert" className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                    {error}
                   </div>
-                </div>
+                )}
 
-                <div className="flex gap-3 mt-6">
+                <div className="flex gap-4">
                   <button
                     type="button"
-                    onClick={() => setStep(1)}
-                    className="flex-1 bg-gray-200 text-blue-900 py-3 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
+                    onClick={() => {
+                      setStep(1);
+                      setError('');
+                    }}
+                    className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-900 font-semibold py-2 px-4 rounded-lg transition-colors"
                   >
-                    ← Back
+                    Back
                   </button>
                   <button
                     type="submit"
                     disabled={loading}
-                    className={`flex-1 py-3 rounded-lg font-semibold transition-colors ${
-                      loading
-                        ? 'bg-gray-400 text-white cursor-not-allowed'
-                        : 'bg-orange-500 text-white hover:bg-orange-600'
-                    }`}
+                    className="flex-1 bg-orange-700 hover:bg-orange-800 disabled:bg-gray-500 text-white font-semibold py-3 px-4 rounded-lg transition-colors"
                   >
                     {loading ? 'Creating...' : 'Create Account'}
                   </button>
                 </div>
-              </div>
-            )}
-          </form>
+              </form>
+            </>
+          )}
 
-          {/* SIGN IN LINK */}
-          <p className="text-center text-slate-600 mt-6">
-            Already have an account?{' '}
-            <a href="/login" className="text-teal-500 font-semibold hover:text-teal-600">
-              Sign in
-            </a>
-          </p>
+          <div className="mt-6 text-center">
+            <p className="text-gray-600">
+              Already have an account?{' '}
+              <Link href="/login" className="text-teal-600 hover:text-teal-700 font-semibold">
+                Sign in here
+              </Link>
+            </p>
+          </div>
         </div>
       </div>
-
-      {/* FOOTER */}
-      <footer className="bg-blue-900 text-gray-300 py-8 mt-16">
-        <div className="max-w-6xl mx-auto px-4 text-center text-sm">
-          <p>&copy; 2025 Civil Tutoring. All rights reserved.</p>
-        </div>
-      </footer>
     </div>
   );
 }
