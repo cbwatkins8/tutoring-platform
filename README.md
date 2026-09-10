@@ -1,8 +1,13 @@
-# Civil Tutoring
+# Take Two Tutoring
 
-A Next.js 16 application for one-on-one online tutoring. Parents can manage
-multiple students, book real tutor availability, and review sessions. Students
-can receive a restricted login, and tutors have a scoped session dashboard.
+A Next.js 16 application for a referral-based tutoring practice. The current
+public MVP explains the service and accepts private consultation requests.
+Family accounts, multi-student support, availability, booking, session
+management, and student access are preserved behind administrator-controlled
+feature flags for later activation.
+
+For complete project continuity, current deployment status, and the pending
+working-tree scope, read `THREAD_HANDOFF_CURRENT.md` before making changes.
 
 ## Local setup
 
@@ -21,7 +26,7 @@ Set these values in `.env.local`:
 ```dotenv
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/tutoring_dev
 JWT_SECRET=replace-with-at-least-32-random-characters
-NEXT_PUBLIC_SITE_URL=http://localhost:3000
+NEXT_PUBLIC_SITE_URL=http://localhost:3001
 ```
 
 Generate a strong session secret with:
@@ -32,7 +37,13 @@ node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 
 ## Verification
 
-With the development server running:
+Start the development server on the project's current local port:
+
+```bash
+npm run dev -- -p 3001
+```
+
+Then verify:
 
 ```bash
 npm run lint
@@ -58,10 +69,14 @@ only those records when it finishes.
 
 ## Product work requiring business decisions
 
-The app does not invent credentials, prices, contact details, cancellation or
-refund terms, testimonials, or performance claims. Add verified business content
-before launch. Payments, automated video links, cancellation/rescheduling, and
-tutor session reports are not implemented and are not promised by public pages.
+The app does not invent prices, contact details, cancellation or refund terms,
+testimonials, or performance claims. Add verified business content before
+accepting clients. Payments, automated video links, and tutor session reports
+are not implemented and are not promised by public pages. Session cancellation
+and rescheduling code exists but remains unavailable to families while online
+booking is disabled.
 
-Because student data can involve children, have the privacy notice and account
-flow reviewed for the ages and jurisdictions the business will actually serve.
+Because student data can involve children, have the privacy notice, website
+terms, consultation acknowledgment, and future tutoring agreement reviewed for
+the ages and jurisdictions the business will actually serve. Review-ready Word
+templates are identified in `THREAD_HANDOFF_CURRENT.md`.
