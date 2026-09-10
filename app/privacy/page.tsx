@@ -3,7 +3,7 @@ import SiteNav from '@/components/SiteNav';
 
 export const metadata = {
   title: 'Privacy',
-  description: 'How Civil Tutoring handles account, student and consultation information.',
+  description: 'How Take Two Tutoring handles account, student and consultation information.',
 };
 
 export default function PrivacyPage() {

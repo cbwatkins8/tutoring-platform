@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { pool, studentFor, verifiedSessionFromRequest } from '@/lib/access';
 import { withinRateLimit } from '@/lib/rate-limit';
 import { SUBJECT_OPTIONS } from '@/lib/student-options';
+import { isAvailableStart } from '@/lib/scheduling';
+import { isSiteFeatureEnabled } from '@/lib/site-features';
 
 /**
  * POST /api/sessions/create
@@ -15,6 +17,9 @@ export async function POST(request: NextRequest) {
     const session = await verifiedSessionFromRequest(request);
     if (!session) {
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+    }
+    if (!(await isSiteFeatureEnabled('online_booking'))) {
+      return NextResponse.json({ message: 'Online booking is not available yet' }, { status: 403 });
     }
 
     const { subject, scheduled_at, notes, student_id, tutor_id } = await request.json();
@@ -56,31 +61,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const tutor = await pool.query(
-      `SELECT DISTINCT t.id
-         FROM tutors t
-         JOIN tutor_availability ta ON ta.tutor_id = t.id AND ta.available = TRUE
-        WHERE t.id = $1
-          AND $2::timestamptz >= NOW() + INTERVAL '1 hour'
-          AND $2::timestamptz < NOW() + INTERVAL '29 days'
-          AND EXTRACT(DOW FROM ($2::timestamptz AT TIME ZONE t.timezone))::int = ta.day_of_week
-          AND ($2::timestamptz AT TIME ZONE t.timezone)::time >= ta.start_time
-          AND (($2::timestamptz + INTERVAL '1 hour') AT TIME ZONE t.timezone)::time <= ta.end_time
-          AND MOD(
-                EXTRACT(EPOCH FROM (
-                  ($2::timestamptz AT TIME ZONE t.timezone)::time - ta.start_time
-                ))::bigint,
-                3600
-              ) = 0`,
-      [Number(tutor_id), when.toISOString()]
-    );
-    if (tutor.rows.length === 0) {
+    const tutorId = Number(tutor_id);
+    if (!(await isAvailableStart(tutorId, when))) {
       return NextResponse.json(
         { message: 'That time is outside the tutor’s availability.' },
         { status: 409 }
       );
     }
-    const tutorId = tutor.rows[0].id;
 
     const { rows } = await pool.query(
       `INSERT INTO sessions (

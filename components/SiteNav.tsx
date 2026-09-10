@@ -10,6 +10,9 @@ import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { refreshCurrentUser, logout, type AuthToken } from '@/lib/auth';
+import BrandLogo from '@/components/BrandLogo';
+
+type PublicFeatures = { client_portal: boolean; online_booking: boolean };
 
 const LINKS = [
   { href: '/how-it-works', label: 'How It Works' },
@@ -24,11 +27,17 @@ export default function SiteNav() {
   const pathname = usePathname();
   const [user, setUser] = useState<AuthToken | null>(null);
   const [open, setOpen] = useState(false);
+  const [features, setFeatures] = useState<PublicFeatures>({ client_portal: false, online_booking: false });
 
   useEffect(() => {
     let active = true;
-    refreshCurrentUser().then((current) => {
-      if (active) setUser(current);
+    Promise.all([
+      refreshCurrentUser(),
+      fetch('/api/site-features', { cache: 'no-store' }).then((response) => response.json()).catch(() => null),
+    ]).then(([current, settings]) => {
+      if (!active) return;
+      setUser(current);
+      if (settings?.features) setFeatures(settings.features);
     });
     return () => {
       active = false;
@@ -42,14 +51,17 @@ export default function SiteNav() {
     router.push('/');
   };
 
-  const dashboardHref = user?.role === 'tutor' ? '/tutor-dashboard' : '/dashboard';
+  const dashboardHref = user?.role === 'admin' ? '/admin' : user?.role === 'tutor' ? '/tutor-dashboard' : '/dashboard';
+  const staff = user?.role === 'tutor' || user?.role === 'admin';
+  const canUsePortal = features.client_portal || staff;
+  const showAccountArea = Boolean(user) || features.client_portal;
 
   return (
     <nav className="bg-slate-900 text-white sticky top-0 z-50">
       <div className="max-w-6xl mx-auto px-4">
         <div className="flex items-center justify-between h-16">
-          <Link href="/" className="text-xl font-bold flex-shrink-0">
-            Civil Tutoring
+          <Link href="/" className="text-xl font-bold flex-shrink-0" aria-label="Take Two Tutoring home">
+            <BrandLogo />
           </Link>
 
           {/* Desktop */}
@@ -64,9 +76,9 @@ export default function SiteNav() {
               </Link>
             ))}
 
-            <span className="w-px h-5 bg-slate-700" aria-hidden="true" />
+            {showAccountArea && <span className="w-px h-5 bg-slate-700" aria-hidden="true" />}
 
-            {user ? (
+            {user && canUsePortal ? (
               <>
                 <Link href={dashboardHref} className="text-gray-200 hover:text-white transition-colors text-sm">
                   Dashboard
@@ -78,7 +90,7 @@ export default function SiteNav() {
                   Logout
                 </button>
               </>
-            ) : (
+            ) : !user && features.client_portal ? (
               <>
                 <Link href="/login" className="text-gray-200 hover:text-white transition-colors text-sm">
                   Login
@@ -90,7 +102,9 @@ export default function SiteNav() {
                   Sign Up
                 </Link>
               </>
-            )}
+            ) : user ? (
+              <button onClick={handleLogout} className="bg-orange-500 hover:bg-orange-600 px-4 py-2 rounded-lg text-sm font-semibold transition-colors">Logout</button>
+            ) : null}
           </div>
 
           {/* Mobile toggle -- 44px target so it is comfortable to tap */}
@@ -124,8 +138,8 @@ export default function SiteNav() {
               </Link>
             ))}
 
-            <div className="pt-3 mt-3 border-t border-slate-700 space-y-2">
-              {user ? (
+            {showAccountArea && <div className="pt-3 mt-3 border-t border-slate-700 space-y-2">
+              {user && canUsePortal ? (
                 <>
                   <Link
                     href={dashboardHref}
@@ -141,7 +155,7 @@ export default function SiteNav() {
                     Logout
                   </button>
                 </>
-              ) : (
+              ) : !user && features.client_portal ? (
                 <>
                   <Link
                     href="/login"
@@ -158,8 +172,10 @@ export default function SiteNav() {
                     Sign Up
                   </Link>
                 </>
-              )}
-            </div>
+              ) : user ? (
+                <button onClick={handleLogout} className="w-full bg-orange-500 hover:bg-orange-600 px-4 py-3 rounded-lg font-semibold transition-colors">Logout</button>
+              ) : null}
+            </div>}
           </div>
         )}
       </div>

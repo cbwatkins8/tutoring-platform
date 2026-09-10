@@ -71,6 +71,9 @@ const checks = [
   ['005', 'sessions_tutor_no_overlap',      constraints.includes('sessions_tutor_no_overlap')],
   ['005', 'sessions_student_no_overlap',    constraints.includes('sessions_student_no_overlap')],
   ['005', 'request_rate_limits table',      tables.includes('request_rate_limits')],
+  ['006', 'tutor availability exceptions',  tables.includes('tutor_availability_exceptions')],
+  ['006', 'tutors.slot_interval_minutes',    cols.includes('tutors.slot_interval_minutes')],
+  ['007', 'site feature controls',            tables.includes('site_features')],
 ];
 
 console.log('');
@@ -102,7 +105,7 @@ if (missing.size === 0) {
 } else {
   console.log('  Run:');
   for (const m of [...missing].sort()) {
-    const file = { '001': '001_fix_mvp_gaps', '002': '002_students_and_accounts', '003': '003_email_case_normalization', '004': '004_inquiries', '005': '005_scheduling_and_rate_limits' }[m];
+    const file = { '001': '001_fix_mvp_gaps', '002': '002_students_and_accounts', '003': '003_email_case_normalization', '004': '004_inquiries', '005': '005_scheduling_and_rate_limits', '006': '006_schedule_management', '007': '007_site_features' }[m];
     console.log(`    psql "$DATABASE_URL" -f lib/migrations/${file}.sql`);
   }
   console.log('');

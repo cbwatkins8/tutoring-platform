@@ -7,6 +7,7 @@ import {
 } from '@/lib/session';
 import { pool } from '@/lib/db';
 import { withinRateLimit } from '@/lib/rate-limit';
+import { isSiteFeatureEnabled } from '@/lib/site-features';
 
 interface SignupRequest {
   parent_name: string;
@@ -25,6 +26,12 @@ export async function POST(request: NextRequest) {
   const client = await pool.connect();
 
   try {
+    if (!(await isSiteFeatureEnabled('client_portal'))) {
+      return NextResponse.json(
+        { message: 'Online accounts are not available yet. Please request a consultation.' },
+        { status: 403 }
+      );
+    }
     const body: SignupRequest = await request.json();
     const {
       parent_name,

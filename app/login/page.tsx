@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import BrandLogo from '@/components/BrandLogo';
 import { refreshCurrentUser, setCurrentUser } from '@/lib/auth';
 
 export default function LoginPage() {
@@ -16,7 +17,7 @@ export default function LoginPage() {
   useEffect(() => {
     refreshCurrentUser().then((user) => {
       if (!user) return;
-      router.replace(user.role === 'tutor' ? '/tutor-dashboard' : '/dashboard');
+      router.replace(user.role === 'admin' ? '/admin' : user.role === 'tutor' ? '/tutor-dashboard' : '/dashboard');
     });
   }, [router]);
 
@@ -49,7 +50,9 @@ export default function LoginPage() {
       setCurrentUser({ userId: data.userId, email: data.email, role: data.role });
 
       // Redirect based on user role
-      if (data.role === 'tutor') {
+      if (data.role === 'admin') {
+        router.push('/admin');
+      } else if (data.role === 'tutor') {
         router.push('/tutor-dashboard');
       } else {
         router.push('/dashboard');
@@ -66,8 +69,8 @@ export default function LoginPage() {
       {/* Navy Navbar */}
       <nav className="bg-slate-900 text-white">
         <div className="max-w-4xl mx-auto px-4 py-4">
-          <Link href="/" className="text-xl font-bold">
-            Civil Tutoring
+          <Link href="/" className="text-xl font-bold" aria-label="Take Two Tutoring home">
+            <BrandLogo />
           </Link>
         </div>
       </nav>

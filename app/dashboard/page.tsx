@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import BrandLogo from '@/components/BrandLogo';
 import { refreshCurrentUser, logout } from '@/lib/auth';
 
 interface Session {
@@ -31,6 +32,8 @@ export default function DashboardPage() {
   const [accountName, setAccountName] = useState('');
   const [role, setRole] = useState<string>('parent');
   const [loading, setLoading] = useState(true);
+  const [sessionError, setSessionError] = useState('');
+  const [bookingEnabled, setBookingEnabled] = useState(false);
 
   const authedFetch = useCallback(async (url: string) => {
     const res = await fetch(url, { cache: 'no-store' });
@@ -55,10 +58,11 @@ export default function DashboardPage() {
       }
       setRole(user.role);
 
-      const [profile, list, sess] = await Promise.all([
+      const [profile, list, sess, publicSettings] = await Promise.all([
         authedFetch('/api/parent'),
         authedFetch('/api/students'),
         authedFetch('/api/sessions'),
+        fetch('/api/site-features', { cache: 'no-store' }).then((response) => response.json()).catch(() => null),
       ]);
 
       // Greet the account holder by their own name, not their child's.
@@ -69,6 +73,7 @@ export default function DashboardPage() {
       if (kids.length > 0) setSelectedId(kids[0].id);
 
       setSessions(sess?.sessions ?? []);
+      setBookingEnabled(Boolean(publicSettings?.features?.online_booking));
       setLoading(false);
     })();
   }, [router, authedFetch]);
@@ -76,6 +81,24 @@ export default function DashboardPage() {
   const handleLogout = async () => {
     await logout();
     router.push('/');
+  };
+
+  const cancelSession = async (sessionId: number) => {
+    if (!window.confirm('Cancel this session? The record will remain in session history.')) return;
+    setSessionError('');
+    const response = await fetch(`/api/sessions/${sessionId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'cancel' }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      setSessionError(data.message || 'Could not cancel the session.');
+      return;
+    }
+    setSessions((current) => current.map((session) =>
+      session.id === sessionId ? { ...session, status: 'cancelled' } : session
+    ));
   };
 
   const formatDate = (value: string) =>
@@ -109,7 +132,7 @@ export default function DashboardPage() {
     : sessions;
 
   const upcoming = visible.filter((s) => s.status === 'scheduled');
-  const past = visible.filter((s) => s.status === 'completed');
+  const past = visible.filter((s) => s.status === 'completed' || s.status === 'cancelled');
 
   const firstName = accountName.split(' ')[0] || 'there';
 
@@ -117,8 +140,8 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-gray-50">
       <nav className="bg-slate-900 text-white sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link href="/" className="text-xl font-bold">
-            Civil Tutoring
+          <Link href="/" className="text-xl font-bold" aria-label="Take Two Tutoring home">
+            <BrandLogo />
           </Link>
           <button
             onClick={handleLogout}
@@ -182,6 +205,12 @@ export default function DashboardPage() {
           </p>
         )}
 
+        {sessionError && (
+          <p role="alert" className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-700">
+            {sessionError}
+          </p>
+        )}
+
         {isParent && students.length === 0 ? (
           <div className="bg-white rounded-lg shadow-md p-6 mb-8 text-center py-12">
             <p className="text-gray-600 mb-4">
@@ -197,10 +226,10 @@ export default function DashboardPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
             <Link
-              href={selectedId ? `/booking?student_id=${selectedId}` : '/booking'}
+              href={bookingEnabled ? (selectedId ? `/booking?student_id=${selectedId}` : '/booking') : '/contact'}
               className="bg-teal-700 hover:bg-teal-800 text-white font-semibold py-4 px-6 rounded-lg transition-colors text-center"
             >
-              📅 Book a Session
+              {bookingEnabled ? '📅 Book a Session' : 'Request a Consultation'}
             </Link>
             <Link
               href="/profile"
@@ -224,7 +253,7 @@ export default function DashboardPage() {
                   ? `${selected.first_name} has no upcoming sessions.`
                   : "You don't have any upcoming sessions."}
               </p>
-              {students.length > 0 && (
+              {students.length > 0 && bookingEnabled && (
                 <Link
                   href={selectedId ? `/booking?student_id=${selectedId}` : '/booking'}
                   className="inline-block bg-orange-700 hover:bg-orange-800 text-white font-semibold py-3 px-6 rounded-lg transition-colors"
@@ -245,20 +274,18 @@ export default function DashboardPage() {
                       <h3 className="font-semibold text-slate-900 text-lg mb-1">
                         {session.subject}
                       </h3>
+                      <p className="text-gray-700 text-sm font-medium mb-1">{session.student_name}</p>
                       <p className="text-gray-600 text-sm sm:text-base">
                         {formatDate(session.scheduled_at)}
                       </p>
                     </div>
-                    {session.zoom_join_url && (
-                      <a
-                        href={session.zoom_join_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="bg-green-700 hover:bg-green-800 text-white font-semibold py-3 px-4 rounded-lg transition-colors text-center"
-                      >
-                        Join Session
-                      </a>
-                    )}
+                    <div className="flex flex-wrap gap-2">
+                      {session.zoom_join_url && (
+                        <a href={session.zoom_join_url} target="_blank" rel="noopener noreferrer" className="bg-green-700 hover:bg-green-800 text-white font-semibold py-2 px-3 rounded-lg text-center text-sm">Join Session</a>
+                      )}
+                      <Link href={`/booking?session_id=${session.id}`} className="border border-teal-600 text-teal-700 hover:bg-teal-50 font-semibold py-2 px-3 rounded-lg text-center text-sm">Reschedule</Link>
+                      <button type="button" onClick={() => cancelSession(session.id)} className="border border-red-300 text-red-700 hover:bg-red-50 font-semibold py-2 px-3 rounded-lg text-sm">Cancel</button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -270,7 +297,7 @@ export default function DashboardPage() {
           <h2 className="text-2xl font-bold text-slate-900 mb-6">Session History</h2>
 
           {past.length === 0 ? (
-            <p className="text-gray-600 text-center py-8">No completed sessions yet.</p>
+            <p className="text-gray-600 text-center py-8">No completed or cancelled sessions yet.</p>
           ) : (
             <div className="space-y-4">
               {past.map((session) => (
@@ -281,12 +308,13 @@ export default function DashboardPage() {
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                     <div>
                       <h3 className="font-semibold text-slate-900">{session.subject}</h3>
+                      <p className="text-gray-700 text-sm font-medium">{session.student_name}</p>
                       <p className="text-gray-600 text-sm">
                         {formatDate(session.scheduled_at)}
                       </p>
                     </div>
-                    <span className="inline-block bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-semibold w-fit">
-                      ✓ Completed
+                    <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold w-fit ${session.status === 'cancelled' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
+                      {session.status === 'cancelled' ? 'Cancelled' : '✓ Completed'}
                     </span>
                   </div>
                 </div>

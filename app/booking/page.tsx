@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import BrandLogo from '@/components/BrandLogo';
 import { refreshCurrentUser, logout } from '@/lib/auth';
 import { inputClass } from '@/components/StudentFields';
 import { SUBJECT_OPTIONS } from '@/lib/student-options';
@@ -20,6 +21,13 @@ interface AvailabilitySlot {
   scheduled_at: string;
 }
 
+interface ExistingSession {
+  id: number;
+  student_id: number;
+  subject: string;
+  status: 'scheduled' | 'completed' | 'cancelled';
+}
+
 export default function BookingPage() {
   const router = useRouter();
   const [students, setStudents] = useState<Student[]>([]);
@@ -32,6 +40,7 @@ export default function BookingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [rescheduleId, setRescheduleId] = useState<number | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -45,10 +54,17 @@ export default function BookingPage() {
         return;
       }
 
-      const [res, availabilityRes] = await Promise.all([
+      const [res, availabilityRes, sessionsRes, publicSettings] = await Promise.all([
         fetch('/api/students', { cache: 'no-store' }),
         fetch('/api/availability', { cache: 'no-store' }),
+        fetch('/api/sessions', { cache: 'no-store' }),
+        fetch('/api/site-features', { cache: 'no-store' }).then((response) => response.json()).catch(() => null),
       ]);
+
+      if (!publicSettings?.features?.online_booking) {
+        router.replace('/contact');
+        return;
+      }
 
       if (res.status === 401) {
         await logout();
@@ -58,16 +74,24 @@ export default function BookingPage() {
 
       const data = res.ok ? await res.json() : null;
       const availability = availabilityRes.ok ? await availabilityRes.json() : null;
+      const sessionData = sessionsRes.ok ? await sessionsRes.json() : null;
       const kids: Student[] = data?.students ?? [];
       setStudents(kids);
 
       // The dashboard passes ?student_id= so the child you were looking at
       // is the one already selected here.
-      const wanted = Number(
-        new URLSearchParams(window.location.search).get('student_id')
-      );
+      const params = new URLSearchParams(window.location.search);
+      const wanted = Number(params.get('student_id'));
+      const wantedSessionId = Number(params.get('session_id'));
+      const existing = (sessionData?.sessions ?? []).find(
+        (session: ExistingSession) => session.id === wantedSessionId && session.status === 'scheduled'
+      ) as ExistingSession | undefined;
       const preselect = kids.find((k) => k.id === wanted);
-      setStudentId(preselect ? preselect.id : kids[0]?.id ?? '');
+      setStudentId(existing?.student_id ?? (preselect ? preselect.id : kids[0]?.id ?? ''));
+      if (existing) {
+        setRescheduleId(existing.id);
+        setSubject(existing.subject);
+      }
       setSlots(availability?.slots ?? []);
       setLoadingSlots(false);
     })();
@@ -90,17 +114,14 @@ export default function BookingPage() {
     setLoading(true);
 
     try {
-      const res = await fetch('/api/sessions/create', {
-        method: 'POST',
+      const res = await fetch(rescheduleId ? `/api/sessions/${rescheduleId}` : '/api/sessions/create', {
+        method: rescheduleId ? 'PATCH' : 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          student_id: studentId,
-          subject,
+          ...(rescheduleId ? { action: 'reschedule' } : { student_id: studentId, subject, tutor_id: selectedSlot.tutor_id, notes }),
           scheduled_at: selectedSlot.scheduled_at,
-          tutor_id: selectedSlot.tutor_id,
-          notes,
         }),
       });
 
@@ -112,7 +133,7 @@ export default function BookingPage() {
         return;
       }
 
-      setSuccess('Session booked successfully!');
+      setSuccess(rescheduleId ? 'Session rescheduled successfully!' : 'Session booked successfully!');
       setSubject('');
       setSlotKey('');
       setNotes('');
@@ -141,8 +162,8 @@ export default function BookingPage() {
     <div className="min-h-screen bg-gray-50">
       <nav className="bg-slate-900 text-white sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link href="/" className="text-xl font-bold">
-            Civil Tutoring
+          <Link href="/" className="text-xl font-bold" aria-label="Take Two Tutoring home">
+            <BrandLogo />
           </Link>
           <div className="flex gap-4 items-center">
             <Link href="/dashboard" className="text-white hover:text-gray-200 text-sm sm:text-base">
@@ -164,10 +185,10 @@ export default function BookingPage() {
       <div className="max-w-2xl mx-auto px-4 py-8 sm:py-12">
         <div className="bg-white rounded-lg shadow-md p-6 sm:p-8">
           <h1 className="text-3xl sm:text-4xl font-bold text-slate-900 mb-2">
-            Book a Session
+            {rescheduleId ? 'Reschedule Session' : 'Book a Session'}
           </h1>
           <p className="text-gray-600 mb-8">
-            Schedule a tutoring session with our expert tutors
+            {rescheduleId ? 'Choose a new available time for this session' : 'Schedule a tutoring session with our expert tutor'}
           </p>
 
           {students.length === 0 ? (
@@ -192,6 +213,7 @@ export default function BookingPage() {
                   <select
                     id="student"
                     value={studentId}
+                    disabled={Boolean(rescheduleId)}
                     onChange={(e) => setStudentId(Number(e.target.value))}
                     className={inputClass}
                   >
@@ -219,6 +241,7 @@ export default function BookingPage() {
                 <select
                   id="subject"
                   value={subject}
+                  disabled={Boolean(rescheduleId)}
                   onChange={(e) => setSubject(e.target.value)}
                   className={inputClass}
                 >
@@ -289,7 +312,7 @@ export default function BookingPage() {
                 disabled={loading}
                 className="w-full bg-orange-700 hover:bg-orange-800 disabled:bg-gray-500 text-white font-semibold py-3 px-4 rounded-lg transition-colors"
               >
-                {loading ? 'Booking...' : 'Book Session'}
+                {loading ? (rescheduleId ? 'Rescheduling...' : 'Booking...') : (rescheduleId ? 'Reschedule Session' : 'Book Session')}
               </button>
             </form>
           )}

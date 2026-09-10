@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { pool } from '@/lib/db';
+import { isSiteFeatureEnabled } from '@/lib/site-features';
 
 interface ConcreteSlot {
   tutor_id: number;
@@ -9,10 +10,14 @@ interface ConcreteSlot {
 
 export async function GET() {
   try {
+    if (!(await isSiteFeatureEnabled('online_booking'))) {
+      return NextResponse.json({ slots: [] });
+    }
     const { rows } = await pool.query<ConcreteSlot>(
       `WITH recurring AS (
          SELECT t.id AS tutor_id,
                 t.timezone,
+                t.slot_interval_minutes,
                 day_value::date AS local_date,
                 ta.start_time,
                 ta.end_time
@@ -24,22 +29,40 @@ export async function GET() {
              INTERVAL '1 day'
            ) AS day_value
           WHERE EXTRACT(DOW FROM day_value)::int = ta.day_of_week
+            AND NOT EXISTS (
+              SELECT 1 FROM tutor_availability_exceptions ex
+               WHERE ex.tutor_id = t.id
+                 AND ex.exception_date = day_value::date
+                 AND ex.available = FALSE
+            )
+       ), windows AS (
+         SELECT tutor_id, timezone, slot_interval_minutes, local_date, start_time, end_time
+           FROM recurring
+         UNION ALL
+         SELECT t.id, t.timezone, t.slot_interval_minutes, ex.exception_date, ex.start_time, ex.end_time
+           FROM tutors t
+           JOIN tutor_availability_exceptions ex ON ex.tutor_id = t.id AND ex.available = TRUE
+          WHERE ex.exception_date BETWEEN (NOW() AT TIME ZONE t.timezone)::date
+                                      AND (NOW() AT TIME ZONE t.timezone)::date + 28
        ), candidates AS (
          SELECT r.tutor_id,
                 r.timezone,
                 ((r.local_date + r.start_time) AT TIME ZONE r.timezone)
-                  + (slot_number * INTERVAL '1 hour') AS scheduled_at
-           FROM recurring r
+                  + (slot_number * make_interval(mins => r.slot_interval_minutes)) AS scheduled_at
+           FROM windows r
            CROSS JOIN LATERAL generate_series(
              0,
              GREATEST(
                0,
-               FLOOR(EXTRACT(EPOCH FROM (r.end_time - r.start_time)) / 3600)::int - 1
+               FLOOR(
+                 (EXTRACT(EPOCH FROM (r.end_time - r.start_time)) - 3600)
+                 / (r.slot_interval_minutes * 60)
+               )::int
              )
            ) AS slot_number
-          WHERE r.end_time > r.start_time
+          WHERE r.end_time >= r.start_time + INTERVAL '1 hour'
        )
-       SELECT c.tutor_id, c.timezone, c.scheduled_at
+       SELECT DISTINCT c.tutor_id, c.timezone, c.scheduled_at
          FROM candidates c
         WHERE c.scheduled_at >= NOW() + INTERVAL '1 hour'
           AND NOT EXISTS (

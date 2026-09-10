@@ -64,7 +64,7 @@ export default function ContactPage() {
             Request a private consultation
           </h1>
           <p className="text-lg text-gray-600 leading-relaxed">
-            Tell Civil about your student&rsquo;s current middle school math class, concerns
+            Tell Take Two Tutoring about your student&rsquo;s current middle school math class, concerns
             and goals. The consultation is private, with no charge or obligation.
           </p>
         </div>

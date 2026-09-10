@@ -41,7 +41,7 @@ const STEPS = [
   {
     n: '1',
     title: 'Private consultation',
-    body: 'We talk through the student’s current class, challenges, goals and whether Civil is the right fit.',
+    body: 'We talk through the student’s current class, challenges, goals and whether Take Two Tutoring is the right fit.',
   },
   {
     n: '2',
@@ -70,8 +70,8 @@ export default function HomePage() {
             Middle school math support, grounded in Tennessee Academic Standards.
           </h1>
           <p className="text-lg sm:text-xl text-gray-600 mb-8 max-w-2xl mx-auto leading-relaxed">
-            A small, referral-led practice for families who want direct support from
-            Civil&mdash;a Tennessee Level 5 educator with a Master&rsquo;s in Education.
+            A small, referral-led practice led by a Tennessee Level 5 educator with a
+            Master&rsquo;s in Education.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link
@@ -149,7 +149,7 @@ export default function HomePage() {
               Tennessee standards are the starting point, not a script.
             </h2>
             <p className="text-gray-700 leading-relaxed">
-              Civil uses the Tennessee Academic Standards to clarify grade-level
+              Take Two Tutoring uses the Tennessee Academic Standards to clarify grade-level
               expectations, then adapts instruction to the student&rsquo;s classroom,
               current understanding and learning needs.
             </p>
@@ -247,7 +247,7 @@ export default function HomePage() {
           </h2>
           <div className="space-y-4 text-gray-600 leading-relaxed">
             <p>
-              Civil is a Tennessee Level 5 educator with a Master&rsquo;s in Education.
+              Take Two Tutoring is led by a Tennessee Level 5 educator with a Master&rsquo;s in Education.
               Families work directly with the same educator each week, so instruction
               stays connected to the student&rsquo;s classroom, strengths and next steps.
             </p>
@@ -268,7 +268,7 @@ export default function HomePage() {
             Begin with a private conversation
           </h2>
           <p className="text-lg text-gray-600 mb-8">
-            Tell Civil about your student&rsquo;s current math class, concerns and goals.
+            Tell Take Two Tutoring about your student&rsquo;s current math class, concerns and goals.
             There is no account required to ask whether this is the right fit.
           </p>
           <Link

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import BrandLogo from '@/components/BrandLogo';
 
 export default function SiteFooter() {
   return (
@@ -6,7 +7,7 @@ export default function SiteFooter() {
       <div className="max-w-6xl mx-auto px-4 py-12">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 mb-8">
           <div>
-            <div className="text-white text-lg font-bold mb-3">Civil Tutoring</div>
+            <div className="text-white text-lg font-bold mb-3"><BrandLogo /></div>
             <p className="text-sm leading-relaxed">
               Private, referral-based middle school math support, online.
             </p>
@@ -34,7 +35,7 @@ export default function SiteFooter() {
         </div>
 
         <div className="pt-8 border-t border-slate-800 text-sm">
-          <p>&copy; {new Date().getFullYear()} Civil Tutoring. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} Take Two Tutoring. All rights reserved.</p>
         </div>
       </div>
     </footer>

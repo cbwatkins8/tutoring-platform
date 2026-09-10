@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import BrandLogo from '@/components/BrandLogo';
 import { refreshCurrentUser, logout } from '@/lib/auth';
 import StudentFields, {
   inputClass,
@@ -241,8 +242,8 @@ export default function ProfilePage() {
     <div className="min-h-screen bg-gray-50">
       <nav className="bg-slate-900 text-white sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link href="/" className="text-xl font-bold">
-            Civil Tutoring
+          <Link href="/" className="text-xl font-bold" aria-label="Take Two Tutoring home">
+            <BrandLogo />
           </Link>
           <div className="flex gap-4 items-center">
             <Link href="/dashboard" className="text-white hover:text-gray-200 text-sm sm:text-base">

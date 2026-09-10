@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import BrandLogo from '@/components/BrandLogo';
+import TutorAvailabilityManager from '@/components/TutorAvailabilityManager';
 import { refreshCurrentUser, logout } from '@/lib/auth';
 
 interface Session {
@@ -19,9 +21,31 @@ interface Session {
 export default function TutorDashboardPage() {
   const router = useRouter();
   const [upcomingSessions, setUpcomingSessions] = useState<Session[]>([]);
-  const [completedSessions, setCompletedSessions] = useState<Session[]>([]);
+  const [historySessions, setHistorySessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  const updateSession = async (id: string, action: 'complete' | 'cancel') => {
+    setError('');
+    const response = await fetch(`/api/sessions/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      setError(data.message || 'Could not update session');
+      return;
+    }
+    setUpcomingSessions((current) => current.filter((session) => session.id !== id));
+    if (action === 'complete') {
+      const completed = upcomingSessions.find((session) => session.id === id);
+      if (completed) setHistorySessions((current) => [{ ...completed, status: 'completed' }, ...current]);
+    } else {
+      const cancelled = upcomingSessions.find((session) => session.id === id);
+      if (cancelled) setHistorySessions((current) => [{ ...cancelled, status: 'cancelled' }, ...current]);
+    }
+  };
 
   useEffect(() => {
     let active = true;
@@ -46,14 +70,14 @@ export default function TutorDashboardPage() {
         const upcoming = data.sessions.filter(
           (s: Session) => s.status === 'scheduled' && new Date(s.scheduled_at) > now
         );
-        const completed = data.sessions.filter(
-          (s: Session) => s.status === 'completed'
+        const history = data.sessions.filter(
+          (s: Session) => s.status === 'completed' || s.status === 'cancelled'
         );
 
         setUpcomingSessions(upcoming.sort((a: Session, b: Session) =>
           new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()
         ));
-        setCompletedSessions(completed.sort((a: Session, b: Session) =>
+        setHistorySessions(history.sort((a: Session, b: Session) =>
           new Date(b.scheduled_at).getTime() - new Date(a.scheduled_at).getTime()
         ));
       } catch {
@@ -100,8 +124,8 @@ export default function TutorDashboardPage() {
       {/* Navy Header/Navbar */}
       <nav className="bg-slate-900 text-white sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-          <Link href="/" className="text-xl font-bold">
-            Civil Tutoring
+          <Link href="/" className="text-xl font-bold" aria-label="Take Two Tutoring home">
+            <BrandLogo />
           </Link>
           <div className="flex gap-4 items-center">
             <span className="text-sm sm:text-base">👨‍🏫 Tutor Dashboard</span>
@@ -142,7 +166,7 @@ export default function TutorDashboardPage() {
           </div>
           <div className="bg-white rounded-lg shadow-md p-6">
             <div className="text-3xl font-bold text-green-500 mb-2">
-              {completedSessions.length}
+              {historySessions.filter((session) => session.status === 'completed').length}
             </div>
             <p className="text-gray-600">Completed Sessions</p>
           </div>
@@ -153,6 +177,14 @@ export default function TutorDashboardPage() {
             <p className="text-gray-600">Active Students</p>
           </div>
         </div>
+
+        <div className="mb-8">
+          <Link href="/admin" className="inline-block bg-slate-700 hover:bg-slate-800 text-white font-semibold py-3 px-5 rounded-lg">
+            Site Administration
+          </Link>
+        </div>
+
+        <TutorAvailabilityManager />
 
         {/* Upcoming Sessions */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
@@ -181,18 +213,13 @@ export default function TutorDashboardPage() {
                         {formatDate(session.scheduled_at)}
                       </p>
                     </div>
-                    {session.zoom_join_url ? (
-                      <a
-                        href={session.zoom_join_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="bg-green-700 hover:bg-green-800 text-white font-semibold py-3 px-4 rounded-lg transition-colors text-center text-sm sm:text-base"
-                      >
-                        Join Zoom
-                      </a>
-                    ) : (
-                      <span className="text-gray-500 text-sm">Awaiting Zoom</span>
-                    )}
+                    <div className="flex flex-wrap gap-2">
+                      {session.zoom_join_url ? (
+                        <a href={session.zoom_join_url} target="_blank" rel="noopener noreferrer" className="bg-green-700 hover:bg-green-800 text-white font-semibold py-2 px-3 rounded-lg text-center text-sm">Join Zoom</a>
+                      ) : <span className="text-gray-500 text-sm self-center">Awaiting Zoom</span>}
+                      <button type="button" onClick={() => updateSession(session.id, 'complete')} className="bg-teal-700 hover:bg-teal-800 text-white font-semibold py-2 px-3 rounded-lg text-sm">Complete</button>
+                      <button type="button" onClick={() => updateSession(session.id, 'cancel')} className="border border-red-300 text-red-700 hover:bg-red-50 font-semibold py-2 px-3 rounded-lg text-sm">Cancel</button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -204,11 +231,11 @@ export default function TutorDashboardPage() {
         <div className="bg-white rounded-lg shadow-md p-6">
           <h2 className="text-2xl font-bold text-slate-900 mb-6">Session History</h2>
 
-          {completedSessions.length === 0 ? (
-            <p className="text-gray-600 text-center py-8">No completed sessions yet.</p>
+          {historySessions.length === 0 ? (
+            <p className="text-gray-600 text-center py-8">No completed or cancelled sessions yet.</p>
           ) : (
             <div className="space-y-4">
-              {completedSessions.slice(0, 5).map((session) => (
+              {historySessions.slice(0, 5).map((session) => (
                 <div
                   key={session.id}
                   className="border border-gray-200 rounded-lg p-4 sm:p-6 hover:bg-gray-50 transition-colors"
@@ -222,15 +249,15 @@ export default function TutorDashboardPage() {
                         {formatDate(session.scheduled_at)}
                       </p>
                     </div>
-                    <span className="inline-block bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-semibold w-fit">
-                      ✓ Completed
+                    <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold w-fit ${session.status === 'cancelled' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
+                      {session.status === 'cancelled' ? 'Cancelled' : '✓ Completed'}
                     </span>
                   </div>
                 </div>
               ))}
-              {completedSessions.length > 5 && (
+              {historySessions.length > 5 && (
                 <p className="text-gray-500 text-sm text-center pt-4">
-                  +{completedSessions.length - 5} more sessions
+                  +{historySessions.length - 5} more sessions
                 </p>
               )}
             </div>

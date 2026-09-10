@@ -19,6 +19,7 @@ CREATE TABLE tutors (
     grades_teach TEXT,
     hourly_rate DECIMAL(10, 2),
     timezone TEXT NOT NULL DEFAULT 'America/Chicago',
+    slot_interval_minutes INTEGER NOT NULL DEFAULT 30 CHECK (slot_interval_minutes IN (15, 30, 60)),
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -55,6 +56,17 @@ CREATE TABLE tutor_availability (
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (tutor_id, day_of_week, start_time, end_time),
     CHECK (end_time > start_time)
+);
+
+CREATE TABLE tutor_availability_exceptions (
+    id SERIAL PRIMARY KEY,
+    tutor_id INTEGER NOT NULL REFERENCES tutors(id) ON DELETE CASCADE,
+    exception_date DATE NOT NULL,
+    available BOOLEAN NOT NULL,
+    start_time TIME,
+    end_time TIME,
+    note TEXT,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE sessions (
@@ -117,6 +129,12 @@ CREATE TABLE request_rate_limits (
     window_start TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     request_count INT NOT NULL DEFAULT 1,
     PRIMARY KEY (action, key_hash)
+);
+
+CREATE TABLE site_features (
+    key TEXT PRIMARY KEY,
+    enabled BOOLEAN NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_sessions_student_id ON sessions(student_id);

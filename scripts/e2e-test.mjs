@@ -45,6 +45,7 @@ async function findApp() {
   return null;
 }
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+let previousFeatureSettings = null;
 
 let passed = 0;
 let failed = 0;
@@ -141,6 +142,30 @@ async function cleanup() {
   }
 }
 
+async function enableTestFeatures() {
+  const keys = ['client_portal', 'online_booking'];
+  const current = await pool.query(
+    'SELECT key, enabled FROM site_features WHERE key = ANY($1::text[])',
+    [keys]
+  );
+  previousFeatureSettings = new Map(current.rows.map((row) => [row.key, row.enabled]));
+  for (const key of keys) {
+    await pool.query(
+      `INSERT INTO site_features (key, enabled, updated_at) VALUES ($1, TRUE, NOW())
+       ON CONFLICT (key) DO UPDATE SET enabled = TRUE, updated_at = NOW()`,
+      [key]
+    );
+  }
+}
+
+async function restoreFeatureSettings() {
+  if (!previousFeatureSettings) return;
+  for (const [key, enabled] of previousFeatureSettings) {
+    await pool.query('UPDATE site_features SET enabled = $1, updated_at = NOW() WHERE key = $2', [enabled, key]);
+  }
+  previousFeatureSettings = null;
+}
+
 async function run() {
   const found = await findApp();
   if (!found) {
@@ -206,6 +231,7 @@ async function run() {
   }
 
   await cleanup();
+  await enableTestFeatures();
 
   // -- signup ---------------------------------------------------------
   console.log('\n[1] Parent signup');
@@ -298,6 +324,18 @@ async function run() {
     available.status === 200 && availableSlots.length >= 3,
     `got ${availableSlots.length} slots`);
   const slot = availableSlots[0];
+  const secondNonOverlappingSlot = slot
+    ? availableSlots.find((candidate) =>
+        new Date(candidate.scheduled_at).getTime() >=
+        new Date(slot.scheduled_at).getTime() + 60 * 60 * 1000
+      )
+    : null;
+  const thirdNonOverlappingSlot = secondNonOverlappingSlot
+    ? availableSlots.find((candidate) =>
+        new Date(candidate.scheduled_at).getTime() >=
+        new Date(secondNonOverlappingSlot.scheduled_at).getTime() + 60 * 60 * 1000
+      )
+    : null;
 
   const past = await api('POST', '/api/sessions/create', {
     token: loginToken,
@@ -310,7 +348,7 @@ async function run() {
   check('past-dated booking rejected', past.status === 400, `got ${past.status}`);
 
   const offGridTime = slot
-    ? new Date(new Date(slot.scheduled_at).getTime() + 30 * 60 * 1000).toISOString()
+    ? new Date(new Date(slot.scheduled_at).getTime() + 15 * 60 * 1000).toISOString()
     : null;
   const offGrid = await api('POST', '/api/sessions/create', {
     token: loginToken,
@@ -385,8 +423,8 @@ async function run() {
     token: tokenB,
     body: {
       subject: 'Math',
-      scheduled_at: availableSlots[1]?.scheduled_at,
-      tutor_id: availableSlots[1]?.tutor_id,
+      scheduled_at: secondNonOverlappingSlot?.scheduled_at,
+      tutor_id: secondNonOverlappingSlot?.tutor_id,
       student_id: aStudentId,
     },
   });
@@ -497,8 +535,8 @@ async function run() {
     token: loginToken,
     body: {
       subject: 'History',
-      scheduled_at: availableSlots[1]?.scheduled_at,
-      tutor_id: availableSlots[1]?.tutor_id,
+      scheduled_at: secondNonOverlappingSlot?.scheduled_at,
+      tutor_id: secondNonOverlappingSlot?.tutor_id,
       student_id: caraId,
     },
   });
@@ -637,8 +675,8 @@ async function run() {
     token: studentToken,
     body: {
       subject: 'Math',
-      scheduled_at: availableSlots[2]?.scheduled_at,
-      tutor_id: availableSlots[2]?.tutor_id,
+      scheduled_at: thirdNonOverlappingSlot?.scheduled_at,
+      tutor_id: thirdNonOverlappingSlot?.tutor_id,
     },
   });
   check('student can book their own session', stuBook.status === 201,
@@ -651,6 +689,7 @@ async function run() {
     `got ${afterLogout.status}`);
 
   await cleanup();
+  await restoreFeatureSettings();
 
   console.log('\n' + '='.repeat(60));
   console.log(`  ${passed} passed, ${failed} failed`);
@@ -665,6 +704,7 @@ async function run() {
 
 run().catch(async (e) => {
   console.error('\nTest run crashed:', e);
+  await restoreFeatureSettings().catch(() => {});
   await pool.end();
   process.exit(1);
 });

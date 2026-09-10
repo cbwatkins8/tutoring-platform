@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import BrandLogo from '@/components/BrandLogo';
 import { refreshCurrentUser, setCurrentUser } from '@/lib/auth';
 import StudentFields, {
   emptyStudent,
@@ -91,8 +92,8 @@ export default function SignupPage() {
     <div className="min-h-screen bg-white flex flex-col">
       <nav className="bg-slate-900 text-white">
         <div className="max-w-4xl mx-auto px-4 py-4">
-          <Link href="/" className="text-xl font-bold">
-            Civil Tutoring
+          <Link href="/" className="text-xl font-bold" aria-label="Take Two Tutoring home">
+            <BrandLogo />
           </Link>
         </div>
       </nav>

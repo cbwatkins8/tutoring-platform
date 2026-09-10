@@ -14,7 +14,7 @@ const STEPS = [
     title: 'A private consultation, at no charge',
     body: [
       'We talk about the student’s current math class, teacher expectations, recent assessments, what has already been tried and what feels difficult right now.',
-      'Civil’s practice is intentionally small and referral-led. If the fit is not right, she will say so before anyone commits to ongoing sessions.',
+      'Take Two Tutoring is intentionally small and referral-led. If the fit is not right, we will say so before anyone commits to ongoing sessions.',
     ],
   },
   {
@@ -30,7 +30,7 @@ const STEPS = [
     title: 'Teach the current unit and the skills beneath it',
     body: [
       'Sessions focus on the material a student is being graded on—this week’s assignment, an upcoming assessment or the topic that did not land in class.',
-      'When a prerequisite skill is getting in the way, Civil addresses it directly so the student can make sense of the current unit rather than merely finish the next worksheet.',
+      'When a prerequisite skill is getting in the way, we address it directly so the student can make sense of the current unit rather than merely finish the next worksheet.',
     ],
   },
   {
@@ -54,7 +54,7 @@ const FAQ = [
   },
   {
     q: 'How are Tennessee standards used?',
-    a: 'They clarify the grade-level knowledge and skills a student is expected to develop. Civil uses them alongside classroom work and assessment evidence to plan instruction for that individual student.',
+    a: 'They clarify the grade-level knowledge and skills a student is expected to develop. Take Two Tutoring uses them alongside classroom work and assessment evidence to plan instruction for that individual student.',
   },
   {
     q: 'What is the cancellation policy?',

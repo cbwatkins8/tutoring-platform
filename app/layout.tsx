@@ -15,11 +15,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
   title: {
-    default: "Civil Tutoring | Middle School Math Support",
-    template: "%s | Civil Tutoring",
+    default: "Take Two Tutoring | Middle School Math Support",
+    template: "%s | Take Two Tutoring",
   },
   description: "Private, referral-based middle school math support grounded in Tennessee Academic Standards.",
-  applicationName: "Civil Tutoring",
+  applicationName: "Take Two Tutoring",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
